@@ -1,5 +1,4 @@
 import express, { json } from "express";
-import swStats from 'swagger-stats';
 import passport from "passport";
 import "./db/mongoose.js";
 import User from "./models/users.js"
@@ -12,7 +11,6 @@ dotenv.config()
 app.use(express.json())
 app.use(express.json({ extended: false }))
     // Enable swagger-stats middleware in express app, passing swagger specification as option 
-app.use(swStats.getMiddleware());
 app.set('view engine', 'ejs')
 app.use(express.static('views'))
 app.use(json());

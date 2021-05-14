@@ -2,5 +2,7 @@
     "appService.zipIgnorePattern": [
         "node_modules{,/**}",
         ".vscode{,/**}"
-    ]
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/c275f95a-a302-4e53-91b5-8cb158ce73d2/resourceGroups/arjun/providers/Microsoft.Web/sites/testarjun",
+    "appService.deploySubpath": "."
 }
