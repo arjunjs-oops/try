@@ -2,37 +2,70 @@ import express, { json } from "express";
 import passport from "passport";
 import "./db/mongoose.js";
 import User from "./models/users.js"
+import { ensureLoggedIn } from "connect-ensure-login"
 import FacebookStrategy from "passport-facebook"
-const app = express();
-const port = process.env.port || 3000;
+import morgan from "morgan"
+import cookieParser from "cookie-parser";
+import expressSession from 'express-session'
 import dotenv from 'dotenv'
 dotenv.config()
 
+const app = express();
+const port = process.env.port || 3000;
+
+
+//middleware to log HTTP requests and errors
+app.use(morgan(function(tokens, req, res) {
+    return [
+        tokens.method(req, res),
+        tokens.url(req, res), "\n",
+        "Chrome:", tokens.req(req, res, 'sec-ch-ua'), "\n",
+        "Mozilla:", tokens.req(req, res, 'User-Agent'), '\n',
+        tokens.status(req, res),
+        tokens.res(req, res, 'content-length'), '-',
+        tokens['response-time'](req, res), 'ms'
+    ].join(' ')
+}));
+app.use(cookieParser());
+app.use(expressSession({ secret: 'keyboard cat', resave: true, saveUninitialized: true }));
+
+
 app.use(express.json())
 app.use(express.json({ extended: false }))
-    // Enable swagger-stats middleware in express app, passing swagger specification as option 
+
+app.use(passport.initialize());
+app.use(passport.session())
+
+
+
+//Take the userid and serialize it 
+passport.serializeUser(function(user, done) {
+    console.log("Here" + user)
+    done(null, user.id);
+});
+
+passport.deserializeUser(async(userid, done) => {
+    try {
+        const user = await User.findById(userid)
+        done(null, user);
+    } catch (error) {
+        done(error.message, null);
+
+    }
+
+});
+
+
 app.set('view engine', 'ejs')
 app.use(express.static('views'))
-app.use(json());
-app.use(passport.initialize());
 
 
-app.use(passport.session())
-passport.serializeUser(function(user, done) {
-    done(null, user);
-});
 
-passport.deserializeUser(function(user, done) {
-    done(null, user);
-});
 
-app.get("/home", passport.authenticate('facebook', { session: true }), (req, res, next) => {
-    res.send("Here")
-})
 passport.use(new FacebookStrategy({
         clientID: process.env.FACEBOOK_APP_ID,
         clientSecret: process.env.FACEBOOK_APP_SECRET,
-        callbackURL: "https://testarjun.azurewebsites.net/auth/facebook/callback",
+        callbackURL: "http://localhost:3000/auth/facebook/callback",
         profileFields: ['id', 'displayName', 'email', 'picture.type(large)'],
         enableProof: true
     },
@@ -40,13 +73,11 @@ passport.use(new FacebookStrategy({
         try {
             const user = await User.findOne({ facebookId: profile.id, email: profile.emails[0].value })
             if (!user) throw new Error("No User")
-            console.log(user)
             return cb(undefined, user)
         } catch (E) {
             try {
 
                 if (E.message === "No User") {
-                    console.log({...profile })
                     const user = new User({
                         facebookId: profile.id,
                         displayName: profile.displayName,
@@ -57,7 +88,6 @@ passport.use(new FacebookStrategy({
                     return cb(undefined, user)
                 }
             } catch (E) {
-                console.log(E.message)
                 cb(new Error(`Database error ${E.message}`, null))
 
             }
@@ -65,6 +95,18 @@ passport.use(new FacebookStrategy({
         }
     }));
 
+
+
+// Initialize Passport and restore authentication state, if any, from the
+// session.
+app.use(passport.initialize());
+app.use(passport.session());
+
+
+
+app.get("/home", ensureLoggedIn(), (req, res, next) => {
+    res.send("Here")
+})
 
 
 app.use((req, res, next) => {
@@ -76,9 +118,12 @@ app.use((req, res, next) => {
     next();
 });
 
-app.get("/login", (req, res) => res.render('form.ejs', {
-    title: "login"
-}));
+app.get('/login', async function(req, res, next) {
+
+    res.render('form.ejs', {
+        title: "login"
+    })
+})
 
 app.get('/auth/facebook',
     passport.authenticate('facebook'));
@@ -86,16 +131,15 @@ app.get('/auth/facebook',
 app.get('/auth/facebook/callback',
     passport.authenticate('facebook', { failureRedirect: '/login' }),
     function(req, res) {
-        console.log("User " + req.user)
-            // Successful authentication, redirect home.
-        res.render('profile.ejs', { user: req.user, title: "Home" })
+        // Successful authentication, redirect home.
+        res.redirect("/home")
     });
 
 
 
 
 
-app.get('/dashboard', passport.authenticate('facebook', { session: true }), (req, res, next) => {
+app.get('/dashboard', ensureLoggedIn(), (req, res, next) => {
     res.render('profile.ejs', { user: req.user, title: "Profile" })
 
 })
@@ -105,9 +149,7 @@ app.get('/logout', function(req, res) {
     res.redirect('/login');
 });
 
-app.get('/swagger-stats', function(req, res) {
-    res.setHeader('Content-Type', 'application/json');
-    res.send(swStats);
-});
+
+
 app.listen(port, () => console.log(`Example app listening on port ${port}!`));
 passport.authenticate({ session: false })
